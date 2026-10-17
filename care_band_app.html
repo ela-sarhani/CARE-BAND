@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CARE-BAND App</title>
+<style>
+  :root { --bg:#f4f6f8; --card:#fff; --text:#1c2733; --muted:#6b7a8a; --line:#e2e8ee; --accent:#0e7c86; --red:#d62839; --amber:#e08a00; --blue:#2563eb; --purple:#7c4dff; --green:#1f9d55; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#10161c; --card:#19222b; --text:#e8eef4; --muted:#8a9bab; --line:#26323d; } }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  .wrap { max-width:640px; margin:0 auto; padding:16px; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+  h1 { font-size:20px; margin:0; }
+  h2 { font-size:15px; margin:0 0 10px; }
+  .pill { font-size:13px; padding:4px 10px; border-radius:99px; background:var(--line); color:var(--muted); }
+  .pill.on { background:var(--green); color:#fff; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:12px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input[type=text], input[type=password], select { padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font-size:14px; }
+  input[type=text], input[type=password] { flex:1; min-width:140px; }
+  button { padding:10px 14px; border:0; border-radius:10px; font-size:14px; cursor:pointer; background:var(--accent); color:#fff; }
+  button.alt { background:var(--line); color:var(--text); }
+  button.alt.active { background:var(--accent); color:#fff; }
+  .nav { display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; margin-bottom:12px; }
+  #alert.WATER { border:2px solid var(--blue); }
+  #alert.FOOD { border:2px solid var(--amber); }
+  #alert.RESTROOM { border:2px solid var(--purple); }
+  #alert.EMERGENCY { border:2px solid var(--red); animation:flash .8s infinite alternate; }
+  @keyframes flash { from { background:rgba(214,40,57,.08);} to { background:rgba(214,40,57,.3);} }
+  #alertText { font-size:28px; font-weight:700; margin:8px 0 6px; }
+  #alertSum { font-size:16px; color:var(--muted); margin-bottom:10px; min-height:20px; }
+  #noteWrap { border-top:1px solid var(--line); padding-top:10px; margin-bottom:14px; }
+  #alertNote { font-size:15px; margin-top:4px; }
+  .tag { font-size:12px; font-weight:600; padding:2px 8px; border-radius:6px; color:#fff; }
+  .tag.WATER { background:var(--blue); } .tag.FOOD { background:var(--amber); } .tag.RESTROOM { background:var(--purple); } .tag.EMERGENCY { background:var(--red); }
+  .item { padding:10px 0; border-top:1px solid var(--line); font-size:14px; }
+  .item:first-child { border-top:0; }
+  .time { color:var(--muted); font-size:12px; margin-right:6px; }
+  .sub { color:var(--muted); font-size:13px; margin-top:3px; }
+  .muted { color:var(--muted); font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { padding:8px 4px; text-align:center; border-bottom:1px solid var(--line); }
+  th:first-child, td:first-child { text-align:left; }
+  th { color:var(--muted); font-weight:600; font-size:12px; }
+  #routineOut { font-size:16px; line-height:1.5; }
+  label.f { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>CARE-BAND App</h1>
+    <span id="status" class="pill">Not connected</span>
+  </header>
+
+  <div class="card">
+    <button id="connectBtn" style="width:100%">Connect to band</button>
+  </div>
+
+  <div id="alert" class="card">
+    <div id="idle" class="muted">Waiting for a request…</div>
+    <div id="live" hidden>
+      <span id="alertTag" class="tag"></span>
+      <div id="alertText" dir="auto"></div>
+      <div id="alertSum" dir="auto"></div>
+      <div id="noteWrap" hidden>
+        <div class="muted">For the caregiver</div>
+        <div id="alertNote" dir="auto"></div>
+      </div>
+      <button id="ackBtn">Acknowledge</button>
+    </div>
+  </div>
+
+  <div class="nav">
+    <button class="alt" data-panel="log">Request log</button>
+    <button class="alt" data-panel="history">History</button>
+    <button class="alt" data-panel="routine">Analyze routine</button>
+    <button class="alt" data-panel="settings">Settings</button>
+  </div>
+
+  <div id="p_log" class="card" hidden>
+    <h2>Request log</h2>
+    <div id="logBody"></div>
+  </div>
+
+  <div id="p_history" class="card" hidden>
+    <h2>History (requests per day)</h2>
+    <div id="histBody"></div>
+    <div style="margin-top:12px"><button id="clearBtn" class="alt">Clear history</button></div>
+  </div>
+
+  <div id="p_routine" class="card" hidden>
+    <h2>Routine</h2>
+    <div id="routineOut" dir="auto"></div>
+  </div>
+
+  <div id="p_settings" class="card" hidden>
+    <h2>Settings</h2>
+    <label class="f">OpenRouter API key</label>
+    <input id="key" type="password" placeholder="sk-or-..." style="width:100%">
+    <label class="f">Model</label>
+    <input id="model" type="text" value="openai/gpt-4o-mini" style="width:100%">
+    <label class="f">Language</label>
+    <select id="lang">
+      <option value="en">English</option>
+      <option value="fr">Français</option>
+      <option value="ar">العربية</option>
+    </select>
+    <label class="f"><input id="voice" type="checkbox" checked> Speak alerts</label>
+    <div class="row" style="margin-top:10px">
+      <button id="testBtn" class="alt">Test AI</button>
+      <button id="voiceBtn" class="alt">Test voice</button>
+    </div>
+    <div id="aiErr" class="muted" style="margin-top:8px;word-break:break-word"></div>
+  </div>
+</div>
+
+<script>
+const SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+const CHAR_UUID    = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+const TYPES = ['WATER','FOOD','RESTROOM','EMERGENCY'];
+const $ = id => document.getElementById(id);
+
+const STATEMENT = {
+  en: { WATER:'I need water.', FOOD:'I want to eat.', RESTROOM:'I need to use the restroom.', EMERGENCY:'I need help now!' },
+  fr: { WATER:'J\'ai besoin d\'eau.', FOOD:'Je veux manger.', RESTROOM:'Je dois aller aux toilettes.', EMERGENCY:'J\'ai besoin d\'aide tout de suite !' },
+  ar: { WATER:'أحتاج إلى ماء.', FOOD:'أريد أن آكل.', RESTROOM:'أحتاج إلى دورة المياه.', EMERGENCY:'أحتاج إلى مساعدة فورًا!' }
+};
+const LANG_NAME  = { en:'English', fr:'French', ar:'Arabic' };
+const VOICE_LANG = { en:'en-US', fr:'fr-FR', ar:'ar-SA' };
+
+function localSummary(lang, n) {
+  if (lang === 'fr') return n === 1 ? 'C\'est ma première demande aujourd\'hui.' : 'C\'est ma demande numéro ' + n + ' aujourd\'hui.';
+  if (lang === 'ar') return n === 1 ? 'هذا أول طلب لي اليوم.' : 'هذا طلبي رقم ' + n + ' اليوم.';
+  return n === 1 ? 'This is my first request today.' : 'This is my request number ' + n + ' today.';
+}
+
+// ---------- Storage ----------
+let log = [];
+try { log = JSON.parse(localStorage.getItem('cb_log') || '[]').filter(l => l.msg !== '(sample data)'); } catch(e) {}
+function save() { try { localStorage.setItem('cb_log', JSON.stringify(log.slice(-300))); } catch(e) {} }
+try {
+  $('key').value = localStorage.getItem('cb_key') || '';
+  $('model').value = localStorage.getItem('cb_model') || $('model').value;
+  $('lang').value = localStorage.getItem('cb_lang') || 'en';
+  $('voice').checked = localStorage.getItem('cb_voice') !== '0';
+} catch(e) {}
+['key','model','lang'].forEach(id => $(id).addEventListener('change', () => {
+  try { localStorage.setItem({key:'cb_key', model:'cb_model', lang:'cb_lang'}[id], $(id).value); } catch(e) {}
+}));
+$('voice').addEventListener('change', () => { try { localStorage.setItem('cb_voice', $('voice').checked ? '1' : '0'); } catch(e) {} });
+
+// ---------- Time helpers ----------
+const pad = n => String(n).padStart(2, '0');
+const fmtTime = t => new Date(t).toLocaleString([], { weekday:'short', hour:'2-digit', minute:'2-digit' });
+function localStamp(t) {
+  const d = new Date(t);
+  return d.toLocaleDateString('en-US', { weekday:'short' }) + ' ' + d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+function ago(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 1) return 'less than a minute ago';
+  if (m < 90) return m + ' min ago';
+  return (m / 60).toFixed(1) + ' h ago';
+}
+
+// ---------- AI via OpenRouter ----------
+function setAiMsg(text, ok) {
+  const el = $('aiErr');
+  el.textContent = text;
+  el.style.color = ok === true ? 'var(--green)' : ok === false ? 'var(--red)' : 'var(--muted)';
+}
+function errText(e) {
+  let m = String(e && e.message || e);
+  try { const j = JSON.parse(m); m = (j.error && (j.error.message || JSON.stringify(j.error))) || m; } catch(_) {}
+  if (e && e.name === 'AbortError') m = 'Request timed out (model too slow or rate-limited).';
+  return 'AI error: ' + m.slice(0, 400);
+}
+
+// Aggressively strips out reasoning dumps or chain-of-thought artifacts
+function stripThinking(raw) {
+  let t = raw.trim();
+  t = t.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  const last = t.lastIndexOf('</think>');
+  if (last !== -1) t = t.slice(last + 8).trim();
+
+  // If the model dumped an outline/analysis block, grab the very last paragraph or sentence
+  const lines = t.split('\n').map(l => l.trim()).filter(Boolean);
+  const cleanLines = lines.filter(l => !/^\d+\.|\*\*|^[-*#]|^analyze|^user|^constraints/i.test(l));
+  if (cleanLines.length > 0) {
+    return cleanLines[cleanLines.length - 1];
+  }
+  return lines.length ? lines[lines.length - 1] : t;
+}
+
+async function claude(system, user, maxTokens, timeoutMs) {
+  maxTokens = maxTokens || 300;
+  timeoutMs = timeoutMs || 12000;
+  const key = $('key').value.trim();
+  if (!key) throw new Error('No API key set (Settings).');
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST', signal: ctrl.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + key,
+        'HTTP-Referer': location.origin || 'http://localhost',
+        'X-Title': 'CARE-BAND'
+      },
+      body: JSON.stringify({
+        model: $('model').value.trim() || 'openai/gpt-4o-mini',
+        max_tokens: maxTokens,
+        reasoning: { exclude: true },
+        messages: [{ role:'system', content: system }, { role:'user', content: user }]
+      })
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const d = await r.json();
+    const raw = d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+    if (!raw || !raw.trim()) throw new Error('Empty response from the model.');
+    return stripThinking(raw);
+  } finally { clearTimeout(to); }
+}
+
+// ---------- AI prompts ----------
+async function makeSummary(type, now, prior) {
+  const lang = $('lang').value;
+  const sameBefore = prior.filter(l => l.type === type);
+  const today = new Date(now).toDateString();
+  const n = sameBefore.filter(l => new Date(l.t).toDateString() === today).length + 1;
+  const last = sameBefore.length ? sameBefore[sameBefore.length - 1] : null;
+  try {
+    const recent = prior.slice(-12).map(l => l.type + ' ' + ago(now - l.t)).join('; ') || 'none';
+    const system =
+      'You speak for a non-verbal patient using a wristband. Write exactly one sentence in first person ("I") in ' + LANG_NAME[lang] + ', ' +
+      'max 20 words, adding one useful fact from the history (e.g. how many times today or when they last asked). ' +
+      'Do not explain yourself. Do not think out loud. Output only the sentence, starting with "I".';
+    const user = 'Request: ' + type + '\nRequest number of this type today: ' + n +
+      '\nLast same request: ' + (last ? ago(now - last.t) : 'none') +
+      '\nRecent requests: ' + recent;
+    const t = await claude(system, user, 150, 10000);
+    setAiMsg('AI OK', true);
+    return t;
+  } catch (e) {
+    console.warn('AI summary failed:', e);
+    setAiMsg(errText(e), false);
+    return localSummary(lang, n);
+  }
+}
+
+function fmtAgo(ms, lang) {
+  const m = Math.round(ms / 60000);
+  const mu = lang === 'ar' ? 'دقيقة' : 'min', hu = lang === 'ar' ? 'ساعة' : 'h';
+  return m < 90 ? Math.max(1, m) + ' ' + mu : (m / 60).toFixed(1) + ' ' + hu;
+}
+function localNote(lang, last, now) {
+  if (lang === 'fr') return last ? 'La dernière demande similaire remonte à ' + fmtAgo(now - last.t, lang) + '.' : 'C\'est la première demande de ce type enregistrée.';
+  if (lang === 'ar') return last ? 'آخر طلب مشابه كان قبل ' + fmtAgo(now - last.t, lang) + '.' : 'هذا أول طلب من هذا النوع مسجل.';
+  return last ? 'The last similar request was ' + fmtAgo(now - last.t, lang) + ' ago.' : 'This is the first request of this kind on record.';
+}
+
+async function makeCaregiverNote(type, now, prior) {
+  const lang = $('lang').value;
+  const same = prior.filter(l => l.type === type);
+  const last = same.length ? same[same.length - 1] : null;
+  try {
+    const gaps = [];
+    for (let i = Math.max(1, same.length - 5); i < same.length; i++) gaps.push(same[i].t - same[i - 1].t);
+    const avg = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : null;
+    const today = new Date(now).toDateString();
+    const counts = {};
+    prior.filter(l => new Date(l.t).toDateString() === today).forEach(l => counts[l.type] = (counts[l.type] || 0) + 1);
+    const recent = prior.slice(-8).map(l => l.type + ' ' + ago(now - l.t)).join('; ') || 'none';
+    const system =
+      'You are briefing a caregiver. Write 1 to 2 sentences in ' + LANG_NAME[lang] + ', max 35 words total. ' +
+      'State only facts from the data that may explain this request: time since last similar request, whether it is earlier or later than usual, and anything relevant from recent history. ' +
+      'Refer to the patient as "the patient". No medical advice. No diagnosis. No preamble. No reasoning. ' +
+      'Output only the sentences.';
+    const user = 'New request: ' + type + '\nLast same request: ' + (last ? ago(now - last.t) : 'none on record') +
+      '\nUsual gap: ' + (avg ? (avg / 3600000).toFixed(1) + ' h' : 'not enough data') +
+      '\nToday so far: ' + JSON.stringify(counts) +
+      '\nRecent: ' + recent;
+    const t = await claude(system, user, 200, 10000);
+    setAiMsg('AI OK', true);
+    return t;
+  } catch (e) {
+    console.warn('AI caregiver note failed:', e);
+    setAiMsg(errText(e), false);
+    return localNote(lang, last, now);
+  }
+}
+
+async function analyzeRoutine() {
+  const out = $('routineOut'), lang = $('lang').value;
+  if (log.length < 3) { out.textContent = 'Not enough requests yet. Check again after a few more.'; return; }
+  out.textContent = 'Analyzing…';
+  const lines = log.slice(-150).map(l => localStamp(l.t) + ' ' + l.type).join('\n');
+  try {
+    const system = 'You output ONLY the final plain text summary. No thinking, no breakdown.';
+    const user = 'Summarize this patient\'s daily routine in ' + LANG_NAME[lang] + ' in 1 short sentence (under 20 words). Highlight primary pattern only. No intro or preamble. Data:\n' + lines;
+    out.textContent = await claude(system, user, 60, 25000);
+    setAiMsg('AI OK', true);
+  } catch (e) {
+    setAiMsg(errText(e), false);
+    const c = {}; log.forEach(l => c[l.type] = (c[l.type] || 0) + 1);
+    out.textContent = 'Totals so far: water ' + (c.WATER || 0) + ', food ' + (c.FOOD || 0) + ', restroom ' + (c.RESTROOM || 0) + ', emergency ' + (c.EMERGENCY || 0) + '.\n(AI unavailable — check Settings.)';
+  }
+}
+
+// ---------- Speech & alarm ----------
+function speak(text, cancelFirst) {
+  if (!$('voice').checked || !window.speechSynthesis || !text) return;
+  if (cancelFirst) speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = VOICE_LANG[$('lang').value];
+  setTimeout(() => speechSynthesis.speak(u), cancelFirst ? 60 : 0);
+}
+let alarmTimer = null, audioCtx = null;
+function startAlarm() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    stopAlarm();
+    let hi = false;
+    alarmTimer = setInterval(() => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = (hi = !hi) ? 880 : 660; g.gain.value = 0.1;
+      o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.3);
+    }, 400);
+    setTimeout(stopAlarm, 5000);
+  } catch(e) {}
+}
+function stopAlarm() { if (alarmTimer) clearInterval(alarmTimer); alarmTimer = null; }
+
+// ---------- Events ----------
+let alertId = 0;
+function showAlert(type, text, sum, note) {
+  $('alert').className = 'card ' + type;
+  $('idle').hidden = true; $('live').hidden = false;
+  $('alertTag').className = 'tag ' + type; $('alertTag').textContent = type;
+  $('alertText').textContent = text; $('alertSum').textContent = sum || '';
+  $('noteWrap').hidden = !note; $('alertNote').textContent = note || '';
+}
+$('ackBtn').onclick = () => {
+  alertId++;
+  stopAlarm();
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  $('alert').className = 'card';
+  $('live').hidden = true; $('idle').hidden = false;
+};
+
+async function handleEvent(type) {
+  const now = Date.now();
+  const prior = log.slice();
+  const entry = { t: now, type, sum: '' };
+  log.push(entry); save();
+  const id = ++alertId;
+  const stmt = STATEMENT[$('lang').value][type];
+
+  showAlert(type, stmt, '', '');
+  refreshPanels();
+  if (type === 'EMERGENCY') startAlarm();
+  speak(stmt, true);
+
+  const sumP = makeSummary(type, now, prior);
+  const noteP = makeCaregiverNote(type, now, prior);
+
+  const sum = await sumP;
+  entry.sum = sum; save(); refreshPanels();
+  if (id !== alertId) return;
+  showAlert(type, stmt, sum, '');
+  speak(sum, false);
+
+  const note = await noteP;
+  entry.note = note; save(); refreshPanels();
+  if (id !== alertId) return;
+  showAlert(type, stmt, sum, note);
+  speak(note, false);
+}
+
+// ---------- Panels ----------
+let openPanel = null;
+function togglePanel(name) {
+  openPanel = openPanel === name ? null : name;
+  ['log','history','routine','settings'].forEach(n => $('p_' + n).hidden = n !== openPanel);
+  document.querySelectorAll('[data-panel]').forEach(b => b.classList.toggle('active', b.dataset.panel === openPanel));
+  refreshPanels();
+}
+document.querySelectorAll('[data-panel]').forEach(b => b.onclick = () => {
+  const name = b.dataset.panel;
+  const opening = openPanel !== name;
+  togglePanel(name);
+  if (opening && name === 'routine') analyzeRoutine();
+});
+
+function refreshPanels() { renderLog(); renderHistory(); }
+
+function renderLog() {
+  const box = $('logBody');
+  if (!log.length) { box.innerHTML = '<div class="muted">No requests yet.</div>'; return; }
+  box.innerHTML = '';
+  const lang = $('lang').value;
+  log.slice(-30).reverse().forEach(l => {
+    const d = document.createElement('div'); d.className = 'item';
+    const top = document.createElement('div');
+    const tm = document.createElement('span'); tm.className = 'time'; tm.textContent = fmtTime(l.t);
+    const tag = document.createElement('span'); tag.className = 'tag ' + l.type; tag.textContent = l.type;
+    const st = document.createElement('span'); st.textContent = ' ' + STATEMENT[lang][l.type]; st.dir = 'auto';
+    top.append(tm, tag, st); d.appendChild(top);
+    if (l.sum) { const s = document.createElement('div'); s.className = 'sub'; s.dir = 'auto'; s.textContent = l.sum; d.appendChild(s); }
+    if (l.note) { const n = document.createElement('div'); n.className = 'sub'; n.dir = 'auto'; n.textContent = 'Caregiver: ' + l.note; d.appendChild(n); }
+    box.appendChild(d);
+  });
+}
+
+function renderHistory() {
+  const box = $('histBody');
+  if (!log.length) { box.innerHTML = '<div class="muted">No history yet.</div>'; return; }
+  const days = {};
+  log.forEach(l => {
+    const k = new Date(l.t).toDateString();
+    const d = days[k] = days[k] || { t: l.t, c: {} };
+    d.c[l.type] = (d.c[l.type] || 0) + 1;
+  });
+  const rows = Object.values(days).sort((a, b) => b.t - a.t).slice(0, 7);
+  let h = '<table><tr><th>Day</th><th>Water</th><th>Food</th><th>Restroom</th><th>Emergency</th></tr>';
+  rows.forEach(r => {
+    h += '<tr><td>' + new Date(r.t).toLocaleDateString([], { weekday:'short', day:'numeric', month:'short' }) + '</td>' +
+         TYPES.map(t => '<td>' + (r.c[t] || 0) + '</td>').join('') + '</tr>';
+  });
+  box.innerHTML = h + '</table>';
+}
+
+$('clearBtn').onclick = () => {
+  if (!confirm('Clear all history?')) return;
+  log = []; save(); refreshPanels();
+};
+
+// ---------- Settings tests ----------
+$('testBtn').onclick = async () => {
+  setAiMsg('Testing…');
+  try { const t = await claude('Reply with the single word OK. Do not explain anything.', 'ping', 100, 20000); setAiMsg('AI works. Model replied: ' + t, true); }
+  catch (e) { console.warn(e); setAiMsg(errText(e), false); }
+};
+$('voiceBtn').onclick = () => {
+  const l = $('lang').value;
+  if (!window.speechSynthesis) { setAiMsg('This browser has no text-to-speech.', false); return; }
+  const was = $('voice').checked; $('voice').checked = true;
+  speak(STATEMENT[l].WATER, true); $('voice').checked = was;
+  const v = speechSynthesis.getVoices().filter(x => x.lang.toLowerCase().startsWith(l));
+  setAiMsg(v.length ? 'Voice test played.' : 'Played, but no ' + LANG_NAME[l] + ' voice is installed; it may stay silent.', v.length ? true : false);
+};
+
+// ---------- Bluetooth ----------
+function setStatus(on, label) {
+  $('status').className = 'pill' + (on ? ' on' : '');
+  $('status').textContent = label || (on ? 'Connected' : 'Not connected');
+}
+$('connectBtn').onclick = async () => {
+  if (!navigator.bluetooth) { alert('Web Bluetooth is not supported here. Use Chrome or Edge, over https or localhost.'); return; }
+  try {
+    const dev = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE_UUID] }] });
+    dev.addEventListener('gattserverdisconnected', () => setStatus(false));
+    const srv = await dev.gatt.connect();
+    const svc = await srv.getPrimaryService(SERVICE_UUID);
+    const ch = await svc.getCharacteristic(CHAR_UUID);
+    await ch.startNotifications();
+    ch.addEventListener('characteristicvaluechanged', e => {
+      const v = new TextDecoder().decode(e.target.value).trim().toUpperCase();
+      if (TYPES.includes(v)) handleEvent(v);
+    });
+    setStatus(true);
+  } catch (err) { setStatus(false, err.message || 'Connection failed'); }
+};
+
+refreshPanels();
+</script>
+</body>
+</html>
